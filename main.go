@@ -19,7 +19,7 @@ Flags:
   -glob=<pattern>   Glob patterns to match files (comma-separated)
   -compress         Enable gzip compression for output
   -max-size=<bytes> Maximum file size in bytes (default: 10MB)
-  -unsafe           Allow processing of normally excluded paths`)
+  -unsafe           Allow processing of normally excluded paths (node_modules or .env files etc)`)
 }
 
 func main() {
