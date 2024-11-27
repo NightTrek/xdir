@@ -1,0 +1,295 @@
+name: Automated PR Review
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  code-review:
+    name: Agent Code Review
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install dependencies
+        run: |
+          npm install openai
+          npm install @actions/core
+          npm install @actions/github
+
+      - name: Run Code Review
+        id: review
+        uses: actions/github-script@v7
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        with:
+          script: |
+            const OpenAI = require('openai');
+            const openai = new OpenAI({
+              apiKey: process.env.OPENROUTER_API_KEY,
+              baseURL: 'https://openrouter.ai/api/v1',
+              defaultHeaders: {
+                'HTTP-Referer': 'https://github.com',
+                'X-Title': 'GitHub PR Review Action'
+              }
+            });
+            
+            // Get PR diff
+            const { data: files } = await github.rest.pulls.listFiles({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number
+            });
+
+            // Initialize review agents with enhanced prompts
+            const agents = {
+              variableNaming: {
+                role: "Senior TypeScript Variable Naming Expert",
+                prompt: `Perform a thorough review of variable naming with these specific criteria:
+
+                1. Consistency: Check if naming follows a single convention (camelCase, PascalCase, etc.)
+                2. Clarity: Ensure names are self-documenting and clearly convey purpose
+                3. Scope Appropriateness: Verify if naming reflects variable scope and usage
+                4. TypeScript Conventions: Confirm adherence to TypeScript naming best practices
+                5. Interface/Type Names: Check if they follow I-prefix or Type-suffix conventions where applicable
+                6. Constants: Verify if constants use UPPERCASE_SNAKE_CASE
+                7. Private Fields: Check if private class members follow _underscore convention
+                8. Generic Types: Ensure they follow single uppercase letter or descriptive name convention
+                9. Boolean Variables: Verify they use is/has/should prefixes
+                10. Event Handlers: Check if they follow handle/on naming pattern
+
+                Provide specific examples of any violations and suggest improvements.`
+              },
+              codeQuality: {
+                role: "Principal Software Architect", 
+                prompt: `Conduct a comprehensive code quality analysis focusing on:
+
+                1. SOLID Principles:
+                   - Single Responsibility: Each class/function has one clear purpose
+                   - Open/Closed: Code is extensible without modification
+                   - Liskov Substitution: Subtypes are substitutable for base types
+                   - Interface Segregation: Interfaces are client-specific
+                   - Dependency Inversion: High-level modules don't depend on low-level modules
+
+                2. Clean Code Practices:
+                   - Function size and complexity (should be small and focused)
+                   - Level of abstraction consistency
+                   - DRY (Don't Repeat Yourself) principle adherence
+                   - Error handling patterns
+                   - Comment necessity and quality
+
+                3. TypeScript-Specific:
+                   - Type safety and proper type usage
+                   - Null/undefined handling
+                   - Async/await patterns
+                   - Generics implementation
+
+                4. Performance Considerations:
+                   - Memory usage patterns
+                   - Computational efficiency
+                   - Resource management
+
+                Provide concrete examples and specific refactoring suggestions.`
+              },
+              bugFinder: {
+                role: "Senior Software Security & Quality Engineer",
+                prompt: `Perform a detailed bug detection analysis focusing on:
+
+                1. Security Vulnerabilities:
+                   - Type coercion issues
+                   - Input validation
+                   - Memory leaks
+                   - Null/undefined dereference
+                   - XSS vulnerabilities in string templates
+
+                2. Concurrency Issues:
+                   - Race conditions in async/await
+                   - Promise chain error handling
+                   - Event listener cleanup
+                   - Shared state mutations
+
+                3. Edge Cases:
+                   - Boundary conditions
+                   - Error states
+                   - Empty/null states
+                   - Large data handling
+
+                4. Type Safety:
+                   - Type assertions safety
+                   - Generic constraints
+                   - Union type handling
+                   - Optional chaining usage
+
+                5. Resource Management:
+                   - Memory management
+                   - Connection handling
+                   - File operations
+                   - Event listener management
+
+                Provide reproduction scenarios and fix suggestions for each issue found.`
+              },
+              typeScriptExpert: {
+                role: "TypeScript Language Expert",
+                prompt: `Analyze TypeScript implementation focusing on:
+
+                1. Type System Usage:
+                   - Proper interface vs type alias usage
+                   - Generic type constraints
+                   - Utility types usage (Partial, Readonly, Pick, etc.)
+                   - Union and intersection types
+                   - Discriminated unions
+                   - Index types and mapped types
+
+                2. Configuration:
+                   - Strict mode implications
+                   - Module resolution
+                   - Declaration files usage
+                   - ESLint/TSLint configuration
+
+                3. Advanced Features:
+                   - Decorators usage
+                   - Parameter properties
+                   - Abstract classes
+                   - Method overloading
+                   - Conditional types
+
+                4. Best Practices:
+                   - Type inference vs explicit typing
+                   - Const assertions
+                   - Readonly usage
+                   - Never type usage
+                   - Type guards implementation
+
+                Provide specific suggestions for better TypeScript feature utilization.`
+              }
+            };
+
+            let reviews = [];
+            let overallPass = true;
+
+            // Process each file with each agent
+            for (const file of files) {
+              if (!file.filename.endsWith('.ts') && !file.filename.endsWith('.tsx')) {
+                continue;
+              }
+
+              const patch = file.patch || '';
+              
+              for (const [agentName, agent] of Object.entries(agents)) {
+                const message = `
+                You are a ${agent.role}. Review this code diff with extreme attention to detail:
+                
+                File: ${file.filename}
+                ${patch}
+
+                ${agent.prompt}
+                
+                Follow these review guidelines:
+                1. Be thorough and specific - point to exact lines and issues
+                2. Provide concrete examples for each issue found
+                3. Suggest specific, actionable improvements
+                4. Consider both immediate and long-term implications
+                5. Rate severity of each issue (Critical/High/Medium/Low)
+                
+                Format response as JSON with fields:
+                {
+                  "issues": [
+                    {
+                      "description": string,
+                      "severity": "Critical" | "High" | "Medium" | "Low",
+                      "lineNumbers": string[],
+                      "suggestedFix": string
+                    }
+                  ],
+                  "recommendations": [
+                    {
+                      "title": string,
+                      "description": string,
+                      "priority": "High" | "Medium" | "Low"
+                    }
+                  ],
+                  "verdict": "pass" | "fail",
+                  "justification": string
+                }`;
+
+                const response = await openai.chat.completions.create({
+                  model: "anthropic/claude-3-sonnet",
+                  messages: [{ 
+                    role: "user", 
+                    content: message 
+                  }],
+                  temperature: 0.1,
+                  max_tokens: 4096,
+                  response_format: { type: "json_object" }
+                });
+
+                try {
+                  const review = JSON.parse(response.choices[0].message.content);
+                  review.agent = agentName;
+                  review.file = file.filename;
+                  reviews.push(review);
+                  
+                  if (review.verdict === 'fail') {
+                    overallPass = false;
+                  }
+                } catch (e) {
+                  console.error(`Failed to parse review for ${file.filename} from ${agentName}`);
+                  overallPass = false;
+                }
+              }
+            }
+
+            // Create enhanced PR comment with review results
+            let comment = '## 🤖 Automated Code Review Results\n\n';
+            
+            for (const review of reviews) {
+              comment += `### ${review.agent} review of ${review.file}\n`;
+              comment += `**Verdict:** ${review.verdict.toUpperCase()} - ${review.justification}\n\n`;
+              
+              if (review.issues.length > 0) {
+                comment += '**Issues Found:**\n';
+                review.issues.forEach(issue => {
+                  comment += `- **[${issue.severity}]** ${issue.description}\n`;
+                  comment += `  - Lines: ${issue.lineNumbers.join(', ')}\n`;
+                  comment += `  - 💡 Fix: ${issue.suggestedFix}\n`;
+                });
+                comment += '\n';
+              }
+              
+              if (review.recommendations.length > 0) {
+                comment += '**Recommendations:**\n';
+                review.recommendations.forEach(rec => {
+                  comment += `- **[${rec.priority}]** ${rec.title}\n`;
+                  comment += `  - ${rec.description}\n`;
+                });
+                comment += '\n';
+              }
+              
+              comment += '---\n\n';
+            }
+            
+            comment += `\n### Overall Verdict: ${overallPass ? '✅ PASS' : '❌ FAIL'}\n`;
+            comment += '\nPowered by Claude 3.5 Sonnet';
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: comment
+            });
+
+            // Set status check result
+            core.setOutput('review-passed', overallPass);
+            if (!overallPass) {
+              core.setFailed('Code review checks did not pass');
+            }
