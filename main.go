@@ -11,7 +11,7 @@ func printHelp() {
 	fmt.Println(`xdir - Directory to XML converter for AI context
 
 Usage:
-  xdir [flags] sourcedir [output.xml]
+  xdir [flags] [sourcedir] [output.xml]
   xdir help    Show this help message
 
 Flags:
@@ -19,7 +19,11 @@ Flags:
   -glob=<pattern>   Glob patterns to match files (comma-separated)
   -compress         Enable gzip compression for output
   -max-size=<bytes> Maximum file size in bytes (default: 10MB)
-  -unsafe           Allow processing of normally excluded paths (node_modules or .env files etc)`)
+  -unsafe           Allow processing of normally excluded paths
+
+Notes:
+  - If no source directory is specified, the current directory is used
+  - If no output file is specified, output.xml is used`)
 }
 
 func main() {
@@ -40,18 +44,27 @@ func main() {
 
 	flag.Parse()
 
-	args := flag.Args()
-	if len(args) == 0 {
-		fmt.Println("Error: No source directory specified")
-		printHelp()
+	// Get current working directory as default
+	cwd, err := os.Getwd()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error getting current directory: %v\n", err)
 		os.Exit(1)
 	}
 
-	config.targetDir = args[0]
+	// Set defaults and handle arguments
+	config.targetDir = cwd           // Default to current directory
+	config.outputFile = "output.xml" // Default output file
+
+	// Override defaults with any provided arguments
+	args := flag.Args()
+	if len(args) > 0 {
+		config.targetDir = args[0]
+	}
 	if len(args) > 1 {
 		config.outputFile = args[1]
 	}
 
+	// Parse patterns
 	if patternsStr != "" {
 		rawPatterns := strings.Split(patternsStr, ",")
 		config.filePatterns = make([]string, 0, len(rawPatterns))
@@ -62,6 +75,7 @@ func main() {
 		}
 	}
 
+	// Parse glob patterns
 	if globPatternsStr != "" {
 		config.globPatterns = strings.Split(globPatternsStr, ",")
 	}
