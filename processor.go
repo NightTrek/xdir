@@ -52,10 +52,11 @@ func processFiles(config Config, writer io.Writer) (Stats, error) {
 
 	fmt.Printf("Processing directory: %s\n", absTargetDir)
 
-	// Write XML header
-	io.WriteString(writer, xml.Header)
-	fmt.Fprintf(writer, "<files>\n")
+	// Create dependency analyzer
+	analyzer := NewDependencyAnalyzer(absTargetDir)
+	fileContents := make(map[string]*FileContent)
 
+	// First pass: Collect all files and their contents
 	err = filepath.Walk(absTargetDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			fmt.Printf("Error accessing path %s: %v\n", path, err)
@@ -114,20 +115,15 @@ func processFiles(config Config, writer io.Writer) (Stats, error) {
 		}
 
 		// Create file content
-		content := FileContent{
+		content := &FileContent{
 			Name:    relPath,
 			Size:    info.Size(),
 			Content: buf.String(),
 		}
 
-		// Encode to XML
-		encoder := xml.NewEncoder(writer)
-		encoder.Indent("", "  ")
-		if err := encoder.Encode(content); err != nil {
-			fmt.Printf("Error encoding %s: %v\n", relPath, err)
-			stats.errors++
-			return nil
-		}
+		// Register file with dependency analyzer
+		analyzer.RegisterFile(path, content)
+		fileContents[path] = content
 
 		stats.filesProc++
 		stats.bytesProc += info.Size()
@@ -135,6 +131,33 @@ func processFiles(config Config, writer io.Writer) (Stats, error) {
 		return nil
 	})
 
+	if err != nil {
+		return stats, err
+	}
+
+	// Analyze dependencies
+	fmt.Println("Analyzing dependencies...")
+	if err := analyzer.AnalyzeDependencies(); err != nil {
+		fmt.Printf("Error analyzing dependencies: %v\n", err)
+		stats.errors++
+	}
+
+	// Write XML output
+	io.WriteString(writer, xml.Header)
+	fmt.Fprintf(writer, "<files>\n")
+
+	// Write each file with its dependencies
+	encoder := xml.NewEncoder(writer)
+	encoder.Indent("", "  ")
+
+	for _, content := range fileContents {
+		if err := encoder.Encode(content); err != nil {
+			fmt.Printf("Error encoding %s: %v\n", content.Name, err)
+			stats.errors++
+			continue
+		}
+	}
+
 	fmt.Fprintf(writer, "</files>\n")
-	return stats, err
+	return stats, nil
 }
