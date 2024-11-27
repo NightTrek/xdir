@@ -1,0 +1,33 @@
+# Binary
+xdir
+*.exe
+
+# Test outputs
+*.xml
+*.xml.gz
+output.*
+
+# Go specific
+*.test
+*.out
+
+# System files
+.DS_Store
+*.swp
+*.swo
+
+# IDE specific
+.idea/
+.vscode/
+*.sublime-workspace
+*.sublime-project
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool
+*.out
+
+# Dependency directories (remove if vendoring dependencies)
+vendor/
+
