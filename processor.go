@@ -10,13 +10,6 @@ import (
 	"strings"
 )
 
-// Stats tracks processing statistics
-type Stats struct {
-	filesProc int64
-	bytesProc int64
-	errors    int64
-}
-
 // isExcludedPath checks if the path should be excluded
 func isExcludedPath(path string, config Config) bool {
 	if config.unsafeMode {
@@ -52,8 +45,9 @@ func processFiles(config Config, writer io.Writer) (Stats, error) {
 
 	fmt.Printf("Processing directory: %s\n", absTargetDir)
 
-	// Create dependency analyzer
+	// Create dependency analyzer and token counter
 	analyzer := NewDependencyAnalyzer(absTargetDir)
+	tokenCounter := NewTokenCounter()
 	fileContents := make(map[string]*FileContent)
 
 	// First pass: Collect all files and their contents
@@ -142,12 +136,15 @@ func processFiles(config Config, writer io.Writer) (Stats, error) {
 		stats.errors++
 	}
 
-	// Write XML output
-	io.WriteString(writer, xml.Header)
-	fmt.Fprintf(writer, "<files>\n")
+	// Create a buffer to hold the XML output for token counting
+	xmlBuffer := &bytes.Buffer{}
+
+	// Write XML output to buffer
+	xmlBuffer.WriteString(xml.Header)
+	xmlBuffer.WriteString("<files>\n")
 
 	// Write each file with its dependencies
-	encoder := xml.NewEncoder(writer)
+	encoder := xml.NewEncoder(xmlBuffer)
 	encoder.Indent("", "  ")
 
 	for _, content := range fileContents {
@@ -158,6 +155,18 @@ func processFiles(config Config, writer io.Writer) (Stats, error) {
 		}
 	}
 
-	fmt.Fprintf(writer, "</files>\n")
+	xmlBuffer.WriteString("</files>\n")
+
+	// Count tokens in the complete XML output
+	xmlContent := xmlBuffer.String()
+	tokenCount := tokenCounter.CountTokens(xmlContent)
+	stats.tokens = int64(tokenCount)
+	fmt.Printf("Token count: %d\n", tokenCount)
+
+	// Write the XML to the actual output
+	if _, err := xmlBuffer.WriteTo(writer); err != nil {
+		return stats, fmt.Errorf("error writing XML output: %v", err)
+	}
+
 	return stats, nil
 }

@@ -1,3 +1,3 @@
-module github.com/yourusername/xdir-context
+module xdir
 
 go 1.21

@@ -37,6 +37,14 @@ type Config struct {
 	unsafeMode   bool
 }
 
+// Stats tracks processing statistics
+type Stats struct {
+	filesProc int64
+	bytesProc int64
+	errors    int64
+	tokens    int64 // Added field for token count
+}
+
 // Default exclusion patterns
 var ExcludedPaths = []string{
 	"node_modules",

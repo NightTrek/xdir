@@ -13,7 +13,6 @@ func cleanPattern(pattern string) string {
 	if !strings.HasPrefix(pattern, ".") {
 		pattern = "." + pattern
 	}
-	fmt.Printf("Cleaned pattern: %s\n", pattern)
 	return pattern
 }
 
@@ -52,9 +51,10 @@ func isFileMatch(path string, config Config) bool {
 
 	// If no patterns specified, use default extensions
 	fmt.Printf("Using default patterns\n")
-	defaultPatterns := []string{".txt", ".go", ".js", ".ts", ".jsx", ".tsx",
-		".html", ".css", ".md", ".mdx", ".py", ".java", ".c", ".cpp", ".h",
-		".hpp", ".rs", ".rb", ".php", ".xml", ".json", ".yaml", ".yml"}
+	defaultPatterns := []string{".c", ".cpp", ".css", ".go", ".h",
+		".hpp", ".html", ".java", ".js", ".json", ".jsx", ".md", ".mdx", ".php",
+		".py", ".rb", ".rs", ".sql", ".swift", ".ts", ".tsx", ".txt", ".xml",
+		".yaml", ".yml"}
 
 	for _, pattern := range defaultPatterns {
 		if cleanPattern(pattern) == ext {

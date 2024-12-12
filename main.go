@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 )
 
@@ -85,16 +86,33 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Error setting up output: %v\n", err)
 		os.Exit(1)
 	}
-	defer cleanup()
 
 	stats, err := processFiles(config, writer)
 	if err != nil {
+		cleanup()
 		fmt.Fprintf(os.Stderr, "Error processing files: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Close the file before renaming
+	cleanup()
+
+	// Rename the output file to include token count
+	dir := filepath.Dir(config.outputFile)
+	ext := filepath.Ext(config.outputFile)
+	base := strings.TrimSuffix(filepath.Base(config.outputFile), ext)
+	newName := fmt.Sprintf("%d-%s%s", stats.tokens, base, ext)
+	newPath := filepath.Join(dir, newName)
+
+	if err := os.Rename(config.outputFile, newPath); err != nil {
+		fmt.Fprintf(os.Stderr, "Error renaming output file: %v\n", err)
 		os.Exit(1)
 	}
 
 	fmt.Printf("\nProcessing complete:\n")
 	fmt.Printf("- Files processed: %d\n", stats.filesProc)
 	fmt.Printf("- Total size: %.2f MB\n", float64(stats.bytesProc)/(1024*1024))
+	fmt.Printf("- Total tokens: %d\n", stats.tokens)
 	fmt.Printf("- Errors: %d\n", stats.errors)
+	fmt.Printf("\nOutput written to: %s\n", newPath)
 }
