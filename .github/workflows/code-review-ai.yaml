@@ -5,6 +5,9 @@ on:
 
 jobs:
   code-review:
+    # Paused 2026-11-05: unpinned npm installs can execute before the secret-backed review step.
+    # Re-enable after replacing the dependency path with reviewed immutable artifacts.
+    if: ${{ false }}
     name: Agent Code Review
     runs-on: ubuntu-latest
     permissions:
