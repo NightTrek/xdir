@@ -47,7 +47,7 @@ jobs:
               `File: ${file.filename}\n${file.patch.slice(0, 4000)}`
             ).join('\n---\n').slice(0, 20000);
             const request = {
-              model: 'anthropic/claude-3-sonnet',
+              model: 'anthropic/claude-haiku-4.5',
               messages: [
                 {
                   role: 'system',
