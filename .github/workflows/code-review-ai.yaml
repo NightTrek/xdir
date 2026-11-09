@@ -7,7 +7,8 @@ jobs:
   code-review:
     # Keep the review paused until a benign PR proves expected behavior and the
     # OPENROUTER_API_KEY/model settings are checked without exposing the key.
-    if: ${{ false }}
+    # On reactivation, retain the same-repository guard to exclude fork PRs.
+    if: ${{ false && github.event.pull_request.head.repo.full_name == github.repository }}
     name: Agent Code Review
     runs-on: ubuntu-24.04
     permissions:
